@@ -1,0 +1,737 @@
+
+#include <iostream>
+#include <vector>
+#include <string>
+#include <memory>
+#include <fstream>
+#include <iomanip>
+#include <algorithm>
+#include <sstream>
+#include <stdexcept>
+#include <cctype>
+#include <limits>
+
+using namespace std;
+
+// ==================== PRODUCT CLASS ====================
+class Product
+{
+private:
+    int id;
+    string name;
+    string category;
+    double price;
+    int stock;
+
+    static int productCount;
+
+public:
+    Product(int i, string n, string c, double p, int s)
+        : id(i), name(n), category(c), price(p), stock(s)
+    {
+        productCount++;
+    }
+
+    int getId() const { return id; }
+    string getName() const { return name; }
+    string getCategory() const { return category; }
+    double getPrice() const { return price; }
+    int getStock() const { return stock; }
+
+    static int getProductCount()
+    {
+        return productCount;
+    }
+
+    void reduceStock(int quantity)
+    {
+        if (quantity <= 0 || quantity > stock)
+            throw runtime_error("Invalid quantity or insufficient stock.");
+
+        stock -= quantity;
+    }
+
+    friend ostream& operator<<(ostream& out, const Product& p)
+    {
+        out << left << setw(5) << p.id
+            << setw(20) << p.name
+            << setw(16) << p.category
+            << "Rs. " << setw(10) << fixed << setprecision(2)
+            << p.price
+            << "Stock: " << p.stock;
+
+        return out;
+    }
+};
+
+int Product::productCount = 0;
+
+// ==================== CART ITEM CLASS ====================
+class CartItem
+{
+public:
+    shared_ptr<Product> product;
+    int quantity;
+
+    CartItem(shared_ptr<Product> p, int q)
+        : product(p), quantity(q)
+    {
+    }
+
+    double getSubtotal() const
+    {
+        return product->getPrice() * quantity;
+    }
+};
+
+// ==================== SHOPPING CART CLASS ====================
+class Cart
+{
+private:
+    vector<CartItem> items;
+
+public:
+    bool isEmpty() const
+    {
+        return items.empty();
+    }
+
+    // Add a product without losing existing cart items
+    void addProduct(shared_ptr<Product> product, int quantity)
+    {
+        if (quantity <= 0)
+            throw runtime_error("Quantity must be greater than zero.");
+
+        auto it = find_if(items.begin(), items.end(),
+            [&](const CartItem& item)
+            {
+                return item.product->getId() == product->getId();
+            });
+
+        int alreadyAdded = 0;
+
+        if (it != items.end())
+            alreadyAdded = it->quantity;
+
+        if (alreadyAdded + quantity > product->getStock())
+            throw runtime_error("Not enough stock available.");
+
+        if (it != items.end())
+        {
+            it->quantity += quantity;
+        }
+        else
+        {
+            items.push_back(CartItem(product, quantity));
+        }
+
+        cout << "\nProduct added to cart successfully!\n";
+    }
+
+    // Remove a product from the cart
+    void removeProduct(int productId)
+    {
+
+        [&](const CartItem& item)
+            {
+                return item.product->getId() == productId;
+            });
+
+        if (it == items.end())
+        {
+            cout << "\nProduct not found in your cart.\n";
+            return;
+        }
+
+        items.erase(it);
+        cout << "\nProduct removed from cart successfully.\n";
+    }
+
+    // Template function to calculate total
+    template <typename T>
+    T calculateTotal() const
+    {
+        T total = 0;
+
+        for (const auto& item : items)
+        {
+            total += static_cast<T>(item.getSubtotal());
+        }
+
+        return total;
+    }
+
+    // Display cart: this function does NOT clear the cart
+    void displayCart() const
+    {
+        if (items.empty())
+        {
+            cout << "\nYour cart is empty!\n";
+            return;
+        }
+
+        cout << "\n================ YOUR SHOPPING CART ================\n";
+        cout << left << setw(6) << "ID"
+             << setw(20) << "Product"
+             << setw(12) << "Price"
+             << setw(10) << "Quantity"
+             << "Subtotal\n";
+
+        cout << string(65, '-') << "\n";
+
+        for (const auto& item : items)
+        {
+            cout << left
+                 << setw(6) << item.product->getId()
+                 << setw(20) << item.product->getName()
+                 << setw(12) << item.product->getPrice()
+                 << setw(10) << item.quantity
+                 << fixed << setprecision(2)
+                 << item.getSubtotal() << "\n";
+        }
+
+        cout << string(65, '-') << "\n";
+        cout << "TOTAL: Rs. "
+             << fixed << setprecision(2)
+             << calculateTotal<double>() << "\n";
+
+        cout << "=====================================================\n";
+    }
+
+    const vector<CartItem>& getItems() const
+    {
+        return items;
+    }
+
+    void clear()
+    {
+        items.clear();
+    }
+};
+
+// ==================== PAYMENT BASE CLASS ====================
+class Payment
+{
+public:
+    virtual bool pay(double amount) = 0;
+
+    virtual ~Payment()
+    {
+    }
+};
+
+// ==================== CARD PAYMENT ====================
+class CardPayment : public Payment
+{
+public:
+    bool pay(double amount) override
+    {
+        cout << "\nProcessing simulated card payment...\n";
+        cout << "Amount: Rs. " << fixed << setprecision(2)
+             << amount << "\n";
+
+        cout << "Card payment successful!\n";
+        return true;
+    }
+};
+
+// ==================== UPI PAYMENT ====================
+class UPIPayment : public Payment
+{
+public:
+    bool pay(double amount) override
+    {
+        cout << "\nProcessing simulated UPI payment...\n";
+        cout << "Amount: Rs. " << fixed << setprecision(2)
+             << amount << "\n";
+
+        cout << "UPI payment successful!\n";
+        return true;
+    }
+};
+
+// ==================== CASH ON DELIVERY ====================
+class CODPayment : public Payment
+{
+public:
+    bool pay(double amount) override
+    {
+        cout << "\nCash on Delivery selected.\n";
+        cout << "Amount payable on delivery: Rs. "
+             << fixed << setprecision(2) << amount << "\n";
+
+        return true;
+    }
+};
+
+// ==================== FILE HANDLING ====================
+void saveProducts(const vector<shared_ptr<Product>>& products)
+{
+    ofstream file("products.txt");
+
+    if (!file)
+    {
+        cout << "Warning: Could not save products file.\n";
+        return;
+    }
+
+    for (const auto& p : products)
+    {
+        file << p->getId() << ","
+             << p->getName() << ","
+             << p->getCategory() << ","
+             << p->getPrice() << ","
+             << p->getStock() << "\n";
+    }
+
+    file.close();
+}
+
+void saveOrder(const string& customer, const Cart& cart,
+               double total, const string& paymentMethod)
+{
+    ofstream file("orders.txt", ios::app);
+
+    if (!file)
+    {
+        throw runtime_error("Unable to save order. Checkout cancelled.");
+    }
+
+    file << "Customer: " << customer << "\n";
+    file << "Payment: " << paymentMethod << "\n";
+
+    for (const auto& item : cart.getItems())
+    {
+        file << item.product->getName()
+             << " | Quantity: " << item.quantity
+             << " | Subtotal: Rs. "
+             << fixed << setprecision(2)
+             << item.getSubtotal() << "\n";
+    }
+
+    file << "Total: Rs. " << fixed << setprecision(2)
+         << total << "\n";
+    file << "----------------------------------------\n";
+
+    if (!file)
+        throw runtime_error("Could not write the order to file.");
+}
+
+// ==================== ORDER CLASS ====================
+class Order
+{
+private:
+    static int orderCount;
+
+public:
+    static int getOrderCount()
+    {
+        return orderCount;
+    }
+
+    bool placeOrder(string customer, Cart& cart,
+                    vector<shared_ptr<Product>>& products,
+                    Payment& payment, string paymentMethod)
+    {
+        if (cart.isEmpty())
+        {
+            cout << "\nYour cart is empty. Add products first.\n";
+            return false;
+        }
+
+        // Check stock again before checkout
+        for (const auto& item : cart.getItems())
+        {
+            if (item.quantity > item.product->getStock())
+            {
+                cout << "\nInsufficient stock for "
+                     << item.product->getName() << ".\n";
+                return false;
+            }
+        }
+
+        double total = cart.calculateTotal<double>();
+
+        cout << "\n========== ORDER SUMMARY ==========\n";
+        cout << "Customer: " << customer << "\n";
+        cart.displayCart();
+
+        cout << "\nConfirm your order? (1 = Yes, 0 = No): ";
+
+        int confirm;
+
+        if (!(cin >> confirm))
+        {
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            cout << "Invalid input. Order cancelled.\n";
+            return false;
+        }
+
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
+        if (confirm != 1)
+        {
+            cout << "Order cancelled. Your cart is unchanged.\n";
+            return false;
+        }
+
+        // Process payment before changing stock or clearing cart
+        if (!payment.pay(total))
+        {
+            cout << "Payment failed. Your cart is unchanged.\n";
+            return false;
+        }
+
+        // Save order details
+        try
+        {
+            saveOrder(customer, cart, total, paymentMethod);
+        }
+        catch (const exception& e)
+        {
+            cout << e.what() << "\n";
+            cout << "Please contact the shop administrator.\n";
+        }
+
+        // Update stock after successful simulated payment
+        for (const auto& item : cart.getItems())
+        {
+            item.product->reduceStock(item.quantity);
+        }
+
+        saveProducts(products);
+
+        orderCount++;
+
+        cout << "\n====================================\n";
+        cout << "ORDER PLACED SUCCESSFULLY!\n";
+        cout << "Order number: " << orderCount << "\n";
+        cout << "Total paid/payable: Rs. "
+             << fixed << setprecision(2) << total << "\n";
+        cout << "Thank you for shopping with us!\n";
+        cout << "====================================\n";
+
+        // Clear the cart ONLY after checkout
+        cart.clear();
+
+        return true;
+    }
+};
+
+int Order::orderCount = 0;
+
+// ==================== DISPLAY PRODUCTS ====================
+void displayProducts(const vector<shared_ptr<Product>>& products)
+{
+    cout << "\n================ AVAILABLE PRODUCTS ================\n";
+
+    cout << left << setw(5) << "ID"
+         << setw(20) << "Product"
+         << setw(16) << "Category"
+         << setw(15) << "Price"
+         << "Stock\n";
+
+    cout << string(65, '-') << "\n";
+
+    for (const auto& p : products)
+    {
+        cout << *p << "\n";
+    }
+
+    cout << string(65, '=') << "\n";
+}
+
+// ==================== SEARCH PRODUCT ====================
+void searchProduct(const vector<shared_ptr<Product>>& products)
+{
+    cout << "\nEnter product name to search: ";
+
+    string searchName;
+    getline(cin, searchName);
+
+    transform(searchName.begin(), searchName.end(),
+              searchName.begin(),
+              [](unsigned char ch)
+              {
+                  return static_cast<char>(tolower(ch));
+              });
+
+    bool found = false;
+
+    for (const auto& p : products)
+    {
+        string name = p->getName();
+
+        transform(name.begin(), name.end(), name.begin(),
+                  [](unsigned char ch)
+                  {
+                      return static_cast<char>(tolower(ch));
+                  });
+
+        if (name.find(searchName) != string::npos)
+        {
+            cout << "\n" << *p << "\n";
+            found = true;
+        }
+    }
+
+    if (!found)
+    {
+        cout << "No matching product found.\n";
+    }
+}
+
+// ==================== SAFE INTEGER INPUT ====================
+int readInt(string message)
+{
+    while (true)
+    {
+        cout << message;
+
+        string line;
+        getline(cin, line);
+
+        stringstream ss(line);
+        int value;
+        char extra;
+
+        if (ss >> value && !(ss >> extra))
+        {
+            return value;
+        }
+
+        cout << "Invalid input. Please enter a whole number.\n";
+    }
+}
+
+// ==================== PAUSE SCREEN ====================
+void pressEnterToContinue()
+{
+    cout << "\nPress Enter to return to the menu...";
+    string pause;
+    getline(cin, pause);
+}
+
+// ==================== MAIN FUNCTION ====================
+int main()
+{
+    try
+    {
+        cout << "========================================\n";
+        cout << "       ONLINE SHOPPING SYSTEM\n";
+        cout << "========================================\n";
+
+        cout << "Enter your name: ";
+
+        string customerName;
+        getline(cin, customerName);
+
+        if (customerName.empty())
+            customerName = "Customer";
+
+        // Create product catalogue
+        vector<shared_ptr<Product>> products;
+
+        products.push_back(make_shared<Product>(
+            1, "Laptop", "Electronics", 55000, 10));
+
+        products.push_back(make_shared<Product>(
+            2, "Headphones", "Electronics", 2000, 20));
+
+        products.push_back(make_shared<Product>(
+            3, "T-Shirt", "Clothing", 800, 30));
+
+        products.push_back(make_shared<Product>(
+            4, "Shoes", "Footwear", 2500, 15));
+
+        products.push_back(make_shared<Product>(
+            5, "Smart Watch", "Electronics", 3500, 12));
+
+        products.push_back(make_shared<Product>(
+            6, "Keyboard", "Accessories", 1200, 25));
+
+        Cart cart;
+        Order order;
+
+        int choice;
+
+        // Menu repeats until the user chooses Exit
+        do
+        {
+            cout << "\n\n========== MAIN MENU ==========\n";
+            cout << "Welcome, " << customerName << "!\n";
+            cout << "1. Display Products\n";
+            cout << "2. Search Product\n";
+            cout << "3. Add Product to Cart\n";
+            cout << "4. Remove Product from Cart\n";
+            cout << "5. View Shopping Cart\n";
+            cout << "6. Checkout\n";
+            cout << "7. View Shop Statistics\n";
+            cout << "8. Exit\n";
+            cout << "===============================\n";
+
+            choice = readInt("Enter your choice: ");
+
+            try
+            {
+                switch (choice)
+                {
+                    case 1:
+                    {
+                        displayProducts(products);
+                        pressEnterToContinue();
+                        break;
+                    }
+
+                    case 2:
+                    {
+                        searchProduct(products);
+                        pressEnterToContinue();
+                        break;
+                    }
+
+                    case 3:
+                    {
+                        displayProducts(products);
+
+                        int id = readInt(
+                            "\nEnter product ID to add: ");
+
+                        int quantity = readInt(
+                            "Enter quantity: ");
+
+                        auto it = find_if(
+                            products.begin(), products.end(),
+                            [&](const shared_ptr<Product>& p)
+                            {
+                                return p->getId() == id;
+                            });
+
+                        if (it == products.end())
+                        {
+                            cout << "Invalid product ID.\n";
+                        }
+                        else
+                        {
+                            cart.addProduct(*it, quantity);
+                        }
+
+                        pressEnterToContinue();
+                        break;
+                    }
+
+                    case 4:
+                    {
+                        // Show current cart before removing an item
+                        cart.displayCart();
+
+                        if (!cart.isEmpty())
+                        {
+                            int id = readInt(
+                                "\nEnter product ID to remove: ");
+
+                            cart.removeProduct(id);
+                        }
+
+                        pressEnterToContinue();
+                        break;
+                    }
+
+                    case 5:
+                    {
+                        // IMPORTANT: Displaying the cart never clears it
+                        cart.displayCart();
+
+                        pressEnterToContinue();
+                        break;
+                    }
+
+                    case 6:
+                    {
+                        cout << "\nSelect payment method:\n";
+                        cout << "1. Card\n";
+                        cout << "2. UPI\n";
+                        cout << "3. Cash on Delivery\n";
+
+                        int paymentChoice = readInt(
+                            "Enter payment choice: ");
+
+                        if (paymentChoice == 1)
+                        {
+                            CardPayment payment;
+
+                            order.placeOrder(
+                                customerName, cart, products,
+                                payment, "Card");
+                        }
+                        else if (paymentChoice == 2)
+                        {
+                            UPIPayment payment;
+
+                            order.placeOrder(
+                                customerName, cart, products,
+                                payment, "UPI");
+                        }
+                        else if (paymentChoice == 3)
+                        {
+                            CODPayment payment;
+
+                            order.placeOrder(
+                                customerName, cart, products,
+                                payment, "Cash on Delivery");
+                        }
+                        else
+                        {
+                            cout << "Invalid payment choice.\n";
+                        }
+
+                        pressEnterToContinue();
+                        break;
+                    }
+
+                    case 7:
+                    {
+                        cout << "\n========== SHOP STATISTICS ==========\n";
+                        cout << "Number of products: "
+                             << Product::getProductCount() << "\n";
+                        cout << "Orders completed this session: "
+                             << Order::getOrderCount() << "\n";
+                        cout << "Products currently in your cart: "
+                             << cart.getItems().size() << "\n";
+                        cout << "=====================================\n";
+
+                        pressEnterToContinue();
+                        break;
+                    }
+
+                    case 8:
+                    {
+                        cout << "\nThank you for visiting our shop, "
+                             << customerName << "!\n";
+                        cout << "Goodbye!\n";
+                        break;
+                    }
+
+                    default:
+                    {
+                        cout << "Invalid choice. Enter a number from 1 to 8.\n";
+                        pressEnterToContinue();
+                    }
+                }
+            }
+            catch (const exception& e)
+            {
+                cout << "\nError: " << e.what() << "\n";
+                pressEnterToContinue();
+            }
+
+        } while (choice != 8);
+    }
+    catch (const exception& e)
+    {
+        cout << "\nProgram error: " << e.what() << "\n";
+    }
+
+    return 0;
+}
